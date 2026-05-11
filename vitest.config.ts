@@ -16,6 +16,7 @@ export default defineWorkersConfig({
             FCM_PROJECT_ID: "test-project",
             FCM_CLIENT_EMAIL: "test@test.iam.gserviceaccount.com",
             FCM_PRIVATE_KEY: "test-key",
+            TOKEN_SERVICE_URL: "https://token.aptove.com",
           },
         },
       },

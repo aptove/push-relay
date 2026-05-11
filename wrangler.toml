@@ -28,6 +28,7 @@ crons = ["*/45 * * * *"]
 APNS_BUNDLE_ID = "com.aptove.ios"
 APNS_SANDBOX = "true"  # Use "true" for debug builds, "false" for production/TestFlight
 FCM_PROJECT_ID = ""
+TOKEN_SERVICE_URL = "https://token.aptove.com"
 
 # Secrets (set via `wrangler secret put <NAME>`):
 # - APNS_PRIVATE_KEY   (contents of .p8 file)

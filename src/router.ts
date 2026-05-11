@@ -10,6 +10,7 @@ import type {
 import { addDevice, removeDevice, getDevices } from "./kv";
 import { sendApns } from "./apns";
 import { sendFcm } from "./fcm";
+import { verifyBearerJwt } from "./jwt";
 
 // ───────────────────────────────
 // Request routing
@@ -23,7 +24,7 @@ export async function handleRequest(
   const { pathname } = url;
   const method = request.method;
 
-  // Health check
+  // Health check (no auth)
   if (method === "GET" && pathname === "/health") {
     return json({ ok: true, status: "healthy", timestamp: new Date().toISOString() });
   }
@@ -54,19 +55,18 @@ async function handleRegister(
   request: Request,
   env: Env,
 ): Promise<Response> {
+  const auth = await verifyBearerJwt(request, env);
+  if (!auth.ok) return json({ ok: false, error: auth.error }, 401);
+  const isolationKey = auth.sub;
+
   const body = await parseBody<RegisterRequest>(request);
   if (!body) return json({ ok: false, error: "Invalid JSON body" }, 400);
 
-  // Validate required fields
-  if (!body.relay_token || !body.device_token || !body.platform) {
+  if (!body.device_token || !body.platform) {
     return json(
-      { ok: false, error: "Missing required fields: relay_token, device_token, platform" },
+      { ok: false, error: "Missing required fields: device_token, platform" },
       400,
     );
-  }
-
-  if (!validateRelayToken(body.relay_token)) {
-    return json({ ok: false, error: "Invalid relay_token (minimum 32 characters)" }, 400);
   }
 
   if (body.platform !== "ios" && body.platform !== "android") {
@@ -80,7 +80,7 @@ async function handleRegister(
     registered_at: new Date().toISOString(),
   };
 
-  await addDevice(env.DEVICE_TOKENS, body.relay_token, device);
+  await addDevice(env.DEVICE_TOKENS, isolationKey, device);
 
   return json({ ok: true, message: "Device registered" });
 }
@@ -89,21 +89,18 @@ async function handleUnregister(
   request: Request,
   env: Env,
 ): Promise<Response> {
+  const auth = await verifyBearerJwt(request, env);
+  if (!auth.ok) return json({ ok: false, error: auth.error }, 401);
+  const isolationKey = auth.sub;
+
   const body = await parseBody<UnregisterRequest>(request);
   if (!body) return json({ ok: false, error: "Invalid JSON body" }, 400);
 
-  if (!body.relay_token || !body.device_token) {
-    return json(
-      { ok: false, error: "Missing required fields: relay_token, device_token" },
-      400,
-    );
+  if (!body.device_token) {
+    return json({ ok: false, error: "Missing required field: device_token" }, 400);
   }
 
-  if (!validateRelayToken(body.relay_token)) {
-    return json({ ok: false, error: "Invalid relay_token (minimum 32 characters)" }, 400);
-  }
-
-  const removed = await removeDevice(env.DEVICE_TOKENS, body.relay_token, body.device_token);
+  const removed = await removeDevice(env.DEVICE_TOKENS, isolationKey, body.device_token);
 
   return json({
     ok: true,
@@ -115,21 +112,21 @@ async function handlePush(
   request: Request,
   env: Env,
 ): Promise<Response> {
+  const auth = await verifyBearerJwt(request, env);
+  if (!auth.ok) return json({ ok: false, error: auth.error }, 401);
+  const isolationKey = auth.sub;
+
   const body = await parseBody<PushRequest>(request);
   if (!body) return json({ ok: false, error: "Invalid JSON body" }, 400);
 
-  if (!body.relay_token || !body.title || !body.body) {
+  if (!body.title || !body.body) {
     return json(
-      { ok: false, error: "Missing required fields: relay_token, title, body" },
+      { ok: false, error: "Missing required fields: title, body" },
       400,
     );
   }
 
-  if (!validateRelayToken(body.relay_token)) {
-    return json({ ok: false, error: "Invalid relay_token (minimum 32 characters)" }, 400);
-  }
-
-  const devices = await getDevices(env.DEVICE_TOKENS, body.relay_token);
+  const devices = await getDevices(env.DEVICE_TOKENS, isolationKey);
 
   if (devices.length === 0) {
     return json({ ok: true, results: [], message: "No devices registered" });
@@ -153,11 +150,6 @@ async function handlePush(
 // ───────────────────────────────
 // Helpers
 // ───────────────────────────────
-
-/** Relay token must be at least 32 characters (matches bridge auth_token). */
-function validateRelayToken(token: string): boolean {
-  return typeof token === "string" && token.length >= 32;
-}
 
 async function parseBody<T>(request: Request): Promise<T | null> {
   try {

@@ -6,7 +6,7 @@
  *   FCM_PRIVATE_KEY, FCM_CLIENT_EMAIL
  *
  * Variables (set in wrangler.toml [vars]):
- *   APNS_BUNDLE_ID, APNS_SANDBOX, FCM_PROJECT_ID
+ *   APNS_BUNDLE_ID, APNS_SANDBOX, FCM_PROJECT_ID, TOKEN_SERVICE_URL
  */
 export interface Env {
   // KV namespace bindings
@@ -24,6 +24,9 @@ export interface Env {
   FCM_PRIVATE_KEY: string; // RSA private key from service account (secret)
   FCM_CLIENT_EMAIL: string; // service account email (secret)
   FCM_PROJECT_ID: string; // Firebase project ID (var)
+
+  // JWT auth — cf-token service URL for JWKS fetching
+  TOKEN_SERVICE_URL: string; // "https://token.aptove.com" (var)
 }
 
 /** Device registration stored in KV */
@@ -39,23 +42,20 @@ export interface DeviceStore {
   devices: DeviceRegistration[];
 }
 
-/** POST /register request body */
+/** POST /register request body — auth via Bearer JWT, no relay_token in body */
 export interface RegisterRequest {
-  relay_token: string;
   device_token: string;
   platform: "ios" | "android";
   bundle_id?: string;
 }
 
-/** DELETE /register request body */
+/** DELETE /register request body — auth via Bearer JWT */
 export interface UnregisterRequest {
-  relay_token: string;
   device_token: string;
 }
 
-/** POST /push request body */
+/** POST /push request body — auth via Bearer JWT */
 export interface PushRequest {
-  relay_token: string;
   title: string;
   body: string;
 }
