@@ -10,9 +10,9 @@ This Bruno collection contains all the API endpoints for the Push Relay service.
    - Select **Local** environment for local development
    - Select **Production** environment for deployed worker
    - Update environment variables with your actual values:
-     - `relay_token`: Your bridge auth token (≥32 chars)
+     - `access_token`: Bearer JWT obtained from cf-token (see "Obtaining a JWT" below)
      - `device_token_ios`: APNs device token from iOS device
-          - `device_token_android`: FCM device token from Android device
+     - `device_token_android`: FCM device token from Android device
 
 ## Environment Variables
 
@@ -21,7 +21,7 @@ This Bruno collection contains all the API endpoints for the Push Relay service.
 - For local development with actual push notifications, you'll need to set up `.dev.vars` file
 
 ### Production Environment
-- `base_url`: `https://push-relay.rasimxyz.workers.dev` (update if using custom domain)
+- `base_url`: `https://push.aptove.com` (or your custom domain)
 
 ## API Endpoints
 
@@ -40,24 +40,27 @@ This Bruno collection contains all the API endpoints for the Push Relay service.
 
 ## Notes
 
-- The `relay_token` is the bridge's `auth_token` from QR pairing (minimum 32 characters)
-- Device tokens are obtained from the mobile app when it registers for push notifications
-- All registered devices under a relay_token receive notifications when you call `/push`
+- All API requests (except Health Check) require `Authorization: Bearer <access_token>` — each `.bru` file includes this header via `{{access_token}}`
+- JWTs are issued by cf-token and expire after 1 hour — re-fetch when expired
+- Device tokens are isolated per JWT identity (bridge `client_id`) — devices registered with one bridge cannot receive pushes from another
 - The worker automatically handles APNs JWT and FCM OAuth2 token refresh via cron
 
 ## Collecting Tokens for Testing
 
-### 1. Relay Token (Bridge Auth Token)
+### 1. Obtaining a JWT (access_token)
 
-The `relay_token` is the bridge's `auth_token` from the QR code.
+JWTs are issued by cf-token. Bridges automatically fetch them using their `client_id` and `client_secret` from `common.toml`. For manual testing, you can fetch one directly:
 
-**Get from Bridge Logs:**
 ```bash
-cd bridge
-./target/release/bridge start --agent-command "copilot --acp" --port 3001 --stdio-proxy --qr --verbose 2>&1 | grep -A 20 "QR code data"
+curl -s -X POST https://token.aptove.com/token \
+  -H "Content-Type: application/json" \
+  -d '{"client_id": "<your-bridge-client-id>", "client_secret": "<your-bridge-client-secret>"}' \
+  | jq -r .access_token
 ```
 
-Look for the `authToken` field in the JSON output. It's a long string (≥32 characters).
+The token expires in 1 hour. Paste the value into the `access_token` Bruno environment variable.
+
+> **Bridge client credentials** are stored in `common.toml` under `[push_relay]` → `client_id` and `client_secret`. These are created once via `POST token.aptove.com/clients` with an admin JWT (see `cf-token/README.md`).
 
 ### 2. iOS Device Token (APNs)
 
@@ -89,7 +92,7 @@ Once you have the tokens:
 2. Select **Environments** → **Production** (or Local)
 3. Update variables:
    ```
-   relay_token: <paste_bridge_auth_token>
+   access_token: <paste_jwt_from_cf_token>
    device_token_ios: <paste_ios_apns_token>
    device_token_android: <paste_android_fcm_token>
    ```
@@ -97,7 +100,7 @@ Once you have the tokens:
 
 ### Quick Test
 
-1. **Start bridge** and copy auth token from logs
+1. **Fetch a JWT** using your bridge's `client_id`/`client_secret` (see step 1 above)
 2. **Run mobile app** (iOS or Android) in debug mode
 3. **Copy device token** from console/logcat
 4. **Open Bruno** and update environment variables

@@ -10,9 +10,12 @@ post {
   auth: none
 }
 
+headers {
+  Authorization: Bearer {{access_token}}
+}
+
 body:json {
   {
-    "relay_token": "{{relay_token}}",
     "device_token": "{{device_token_android}}",
     "platform": "android",
     "bundle_id": "com.aptove.android"
@@ -21,13 +24,15 @@ body:json {
 
 docs {
   Register an Android device for push notifications.
-  
+
+  Authentication:
+  - Authorization: Bearer <jwt>  (RS256 JWT from cf-token, 1h TTL)
+
   Required fields:
-  - relay_token: Bridge auth_token (≥32 chars)
   - device_token: FCM device token
   - platform: "android"
   - bundle_id: Android package name (optional)
-  
+
   Response:
   - ok: true
   - message: "Device registered"

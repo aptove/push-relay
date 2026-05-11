@@ -10,29 +10,43 @@ Bridge instances run on user machines. Distributing APNs `.p8` keys or FCM servi
 
 ```
 Bridge ──POST /push──→ [ Push Relay Worker ] ──→ APNs / FCM
-                              │
-                  ┌───────────┴───────────┐
-                  │   KV: DEVICE_TOKENS   │  relay_token → [devices]
-                  │   KV: AUTH_TOKENS     │  cached JWT / OAuth2 token
-                  └───────────────────────┘
-                              │
-              Cron (every 45 min) refreshes auth tokens
+         Bearer JWT              │
+                     ┌───────────┴───────────┐
+                     │   KV: DEVICE_TOKENS   │  client_id → [devices]
+                     │   KV: AUTH_TOKENS     │  JWKS cache + APNs/FCM tokens
+                     └───────────────────────┘
+                                 │
+             Cron (every 45 min) refreshes APNs/FCM auth tokens
+
+cf-token Worker (token.aptove.com)
+  ├── POST /token        → issues RS256 JWT (1h TTL) to authenticated bridges
+  └── GET  /.well-known/jwks.json → JWKS for relay JWT verification
 ```
 
 **Two logical workers in one script:**
-- **Push Worker** (`fetch` handler) – Routes HTTP requests, reads cached tokens from KV
+- **Push Worker** (`fetch` handler) – Routes HTTP requests, verifies RS256 Bearer JWT from cf-token, reads cached APNs/FCM tokens from KV
 - **Token Worker** (`scheduled` handler) – Cron-triggered, refreshes APNs JWT and FCM OAuth2 token
+
+**Authentication flow:**
+1. Bridge obtains a short-lived RS256 JWT from cf-token (`POST /token` with its `client_id`/`client_secret`)
+2. Bridge includes `Authorization: Bearer <jwt>` on every push relay request
+3. Push relay fetches JWKS from cf-token (cached 1h in KV), verifies signature + claims
+4. The JWT `sub` claim (the bridge's `client_id`) is used as the isolation key for device storage
 
 ## API
 
 ### `GET /health`
 Health check. Returns `{ "ok": true, "status": "healthy" }`.
 
+All endpoints except `/health` require a valid Bearer JWT issued by cf-token:
+```
+Authorization: Bearer <jwt>
+```
+
 ### `POST /register`
 Register a device for push notifications.
 ```json
 {
-  "relay_token": "<bridge auth_token, ≥32 chars>",
   "device_token": "<APNs or FCM device token>",
   "platform": "ios" | "android",
   "bundle_id": "com.example.app"  // optional
@@ -43,16 +57,14 @@ Register a device for push notifications.
 Unregister a device.
 ```json
 {
-  "relay_token": "<bridge auth_token>",
   "device_token": "<device token to remove>"
 }
 ```
 
 ### `POST /push`
-Send a push notification to all devices registered under a relay token.
+Send a push notification to all devices registered under this bridge's JWT identity.
 ```json
 {
-  "relay_token": "<bridge auth_token>",
   "title": "New Tool Request",
   "body": "Agent wants to run 'rm -rf /'"
 }
@@ -74,6 +86,7 @@ Response:
 - [Node.js](https://nodejs.org/) ≥ 18
 - [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) (`npm i -g wrangler`)
 - A Cloudflare account
+- **cf-token** deployed and running (see `cf-token/README.md` — must be set up first)
 
 ### 1. Install dependencies
 ```bash
@@ -104,9 +117,10 @@ wrangler secret put FCM_CLIENT_EMAIL    # service account email
 Edit `wrangler.toml`:
 ```toml
 [vars]
-APNS_BUNDLE_ID = "com.yourapp.bundle"
-APNS_SANDBOX   = "true"     # "false" for production
-FCM_PROJECT_ID = "your-firebase-project-id"
+APNS_BUNDLE_ID    = "com.yourapp.bundle"
+APNS_SANDBOX      = "true"                        # "false" for production
+FCM_PROJECT_ID    = "your-firebase-project-id"
+TOKEN_SERVICE_URL = "https://token.aptove.com"    # cf-token base URL
 ```
 
 ### 5. Deploy
@@ -142,6 +156,8 @@ EOF
 npm run dev
 ```
 
+> Note: In local dev mode the relay fetches JWKS from the live cf-token URL (`TOKEN_SERVICE_URL`). Tests generate their own RSA key pair and seed JWKS into the in-memory KV directly, so they run entirely offline.
+
 ## Testing
 ```bash
 npm test           # run all tests
@@ -175,7 +191,9 @@ The OAuth2 bearer token identifies the publisher (service account). Google uses 
 ## Security Model
 
 - APNs/FCM credentials never leave the relay (stored as Cloudflare Secrets)
-- Bridge instances only know the relay URL, never the push credentials
-- Each bridge's `auth_token` (from QR pairing) serves as its `relay_token`
-- Device tokens are isolated per `relay_token` in KV (no cross-bridge access)
+- Bridge instances only know the relay URL and their own `client_id`/`client_secret` — never the push credentials
+- Each bridge authenticates with cf-token to obtain a short-lived RS256 JWT (1-hour TTL)
+- The relay verifies JWT signatures against JWKS fetched from cf-token (cached 1h in KV)
+- Device tokens are isolated per JWT `sub` (bridge `client_id`) in KV — no cross-bridge access is possible
+- On key rotation, the relay detects an unknown `kid`, invalidates its JWKS cache, and retries once — enabling zero-downtime rotation
 - Stale device tokens are automatically cleaned up when APNs/FCM reports them invalid

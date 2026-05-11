@@ -10,20 +10,25 @@ delete {
   auth: none
 }
 
+headers {
+  Authorization: Bearer {{access_token}}
+}
+
 body:json {
   {
-    "relay_token": "{{relay_token}}",
     "device_token": "{{device_token_ios}}"
   }
 }
 
 docs {
   Unregister a device from push notifications.
-  
+
+  Authentication:
+  - Authorization: Bearer <jwt>  (RS256 JWT from cf-token, 1h TTL)
+
   Required fields:
-  - relay_token: Bridge auth_token
   - device_token: The device token to remove (iOS or Android)
-  
+
   Response:
   - ok: true
   - message: "Device unregistered"
