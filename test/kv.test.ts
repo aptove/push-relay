@@ -18,8 +18,9 @@ describe("KV device storage", () => {
   const RELAY = "a".repeat(32); // valid relay token
 
   beforeEach(async () => {
-    // Clean slate — delete the key if it exists
+    // Clean slate — delete keys for all relay tokens used across tests in this suite
     await env.DEVICE_TOKENS.delete(`devices:${RELAY}`);
+    await env.DEVICE_TOKENS.delete(`devices:${"b".repeat(32)}`);
   });
 
   it("returns empty array for unknown relay token", async () => {

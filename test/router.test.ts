@@ -250,11 +250,14 @@ describe("POST /push", () => {
   });
 
   it("rejects missing title", async () => {
+    // The previous test overwrites the shared JWKS cache, so generate a
+    // fresh JWT+JWKS pair here rather than relying on the module-level VALID_JWT.
+    const freshJwt = await generateTestJwt();
     const { status, json } = await call(
       "POST",
       "/push",
       { body: "Hello" },
-      { Authorization: `Bearer ${VALID_JWT}` },
+      { Authorization: `Bearer ${freshJwt}` },
     );
     expect(status).toBe(400);
     expect(json.ok).toBe(false);
