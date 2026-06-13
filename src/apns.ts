@@ -148,8 +148,8 @@ export async function sendApns(
 
     const err = (await res.json().catch(() => ({}))) as { reason?: string };
 
-    // 410 Gone → token permanently invalid, remove it
-    if (res.status === 410) {
+    // 410 Gone or 400 BadDeviceToken → token permanently invalid, remove it
+    if (res.status === 410 || (res.status === 400 && err.reason === "BadDeviceToken")) {
       await removeDeviceGlobally(env.DEVICE_TOKENS, deviceToken);
       return { platform: "ios", status: "removed", reason: err.reason ?? "Unregistered" };
     }
