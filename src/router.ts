@@ -128,6 +128,8 @@ async function handlePush(
 
   const devices = await getDevices(env.DEVICE_TOKENS, isolationKey);
 
+  console.log(`[push] ${devices.length} device(s) registered for client`);
+
   if (devices.length === 0) {
     return json({ ok: true, results: [], message: "No devices registered" });
   }
@@ -143,6 +145,8 @@ async function handlePush(
       }
     }),
   );
+
+  console.log(`[push] results: ${JSON.stringify(results)}`);
 
   return json({ ok: true, results });
 }
