@@ -139,9 +139,9 @@ async function handlePush(
     devices.map((d) => {
       switch (d.platform) {
         case "ios":
-          return sendApns(env, d.device_token, body.title, body.body);
+          return sendApns(env, d.device_token, body.title, body.body, body.data);
         case "android":
-          return sendFcm(env, d.device_token, body.title, body.body);
+          return sendFcm(env, d.device_token, body.title, body.body, body.data);
       }
     }),
   );

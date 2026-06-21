@@ -58,6 +58,8 @@ export interface UnregisterRequest {
 export interface PushRequest {
   title: string;
   body: string;
+  /** Optional custom data passed through to the APNs/FCM payload */
+  data?: Record<string, string>;
 }
 
 /** Per-device push result */

@@ -141,6 +141,7 @@ export async function sendFcm(
   deviceToken: string,
   title: string,
   body: string,
+  data?: Record<string, string>,
 ): Promise<PushResult> {
   const accessToken = await getFcmAccessToken(env);
   const url = `https://fcm.googleapis.com/v1/projects/${env.FCM_PROJECT_ID}/messages:send`;
@@ -152,6 +153,7 @@ export async function sendFcm(
       android: {
         priority: "high" as const,
       },
+      ...(data && Object.keys(data).length > 0 ? { data } : {}),
     },
   };
 

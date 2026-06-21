@@ -116,17 +116,19 @@ export async function sendApns(
   deviceToken: string,
   title: string,
   body: string,
+  data?: Record<string, string>,
 ): Promise<PushResult> {
   const jwt = await getApnsJwt(env);
   const host = apnsHost(env.APNS_SANDBOX);
   const url = `${host}/3/device/${deviceToken}`;
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     aps: {
       alert: { title, body },
       sound: "default",
       "content-available": 1,
     },
+    ...(data && Object.keys(data).length > 0 ? { data } : {}),
   };
 
   try {
