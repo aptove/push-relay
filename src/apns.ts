@@ -127,6 +127,7 @@ export async function sendApns(
       alert: { title, body },
       sound: "default",
       "content-available": 1,
+      badge: 1,
     },
     ...(data && Object.keys(data).length > 0 ? { data } : {}),
   };

@@ -1,15 +1,15 @@
 # Push Relay – Cloudflare Worker
 
-A lightweight push notification relay that forwards notifications to APNs (iOS) and FCM (Android) on behalf of Aptove CLI instances.
+A lightweight push notification relay that forwards notifications to APNs (iOS) and FCM (Android) on behalf of Aptove Router instances.
 
 ## Why a Relay?
 
-Aptove CLI instances run on user machines. Distributing APNs `.p8` keys or FCM service account credentials to every instance would be a critical security risk. The relay centralizes credential management while Aptove CLI instances only need the relay URL.
+Aptove Router instances run on user machines. Distributing APNs `.p8` keys or FCM service account credentials to every instance would be a critical security risk. The relay centralizes credential management while Aptove Router instances only need the relay URL.
 
 ## Architecture
 
 ```
-Aptove CLI ──POST /push──→ [ Push Relay Worker ] ──→ APNs / FCM
+Aptove Router ──POST /push──→ [ Push Relay Worker ] ──→ APNs / FCM
          Bearer JWT              │
                      ┌───────────┴───────────┐
                      │   KV: DEVICE_TOKENS   │  client_id → [devices]
@@ -19,7 +19,7 @@ Aptove CLI ──POST /push──→ [ Push Relay Worker ] ──→ APNs / FCM
              Cron (every 45 min) refreshes APNs/FCM auth tokens
 
 cf-token Worker (token.aptove.com)
-  ├── POST /token        → issues RS256 JWT (1h TTL) to authenticated Aptove CLI instances
+  ├── POST /token        → issues RS256 JWT (1h TTL) to authenticated Aptove Router instances
   └── GET  /.well-known/jwks.json → JWKS for relay JWT verification
 ```
 
@@ -28,10 +28,10 @@ cf-token Worker (token.aptove.com)
 - **Token Worker** (`scheduled` handler) – Cron-triggered, refreshes APNs JWT and FCM OAuth2 token
 
 **Authentication flow:**
-1. Aptove CLI obtains a short-lived RS256 JWT from cf-token (`POST /token` with its `client_id`/`client_secret`)
-2. Aptove CLI includes `Authorization: Bearer <jwt>` on every push relay request
+1. Aptove Router obtains a short-lived RS256 JWT from cf-token (`POST /token` with its `client_id`/`client_secret`)
+2. Aptove Router includes `Authorization: Bearer <jwt>` on every push relay request
 3. Push relay fetches JWKS from cf-token (cached 1h in KV), verifies signature + claims
-4. The JWT `sub` claim (Aptove CLI's `client_id`) is used as the isolation key for device storage
+4. The JWT `sub` claim (Aptove Router's `client_id`) is used as the isolation key for device storage
 
 ## API
 
