@@ -45,6 +45,35 @@ APNS_SANDBOX = "true"  # Use "true" for debug builds, "false" for production/Tes
 FCM_PROJECT_ID = ""
 TOKEN_SERVICE_URL = "https://token.aptove.com"
 
+# Token bucket rate limit configuration (override per deployment)
+PUSH_BUCKET_CAPACITY = "20"
+PUSH_REFILL_INTERVAL_MS = "720000"        # 12 minutes — 5/hr sustained
+REGISTER_BUCKET_CAPACITY = "5"
+REGISTER_REFILL_INTERVAL_MS = "3600000"   # 1 hour — 1/hr sustained
+
+# Cloudflare native rate limiters (Tier 1 — hard spacing, per client_id)
+[[ratelimits]]
+name = "PUSH_ABUSE_LIMITER"
+namespace_id = "1001"
+  [ratelimits.simple]
+  limit = 1
+  period = 60
+
+[[ratelimits]]
+name = "REGISTER_ABUSE_LIMITER"
+namespace_id = "1002"
+  [ratelimits.simple]
+  limit = 1
+  period = 60
+
+# Cloudflare native rate limiter (Tier 1 — hard spacing, per IP for public endpoints)
+[[ratelimits]]
+name = "HEALTH_LIMITER"
+namespace_id = "1003"
+  [ratelimits.simple]
+  limit = 1
+  period = 60
+
 # Secrets (set via `wrangler secret put <NAME>`):
 # - APNS_PRIVATE_KEY   (contents of .p8 file)
 # - APNS_KEY_ID        (10-char string from Apple Developer portal)

@@ -1,0 +1,45 @@
+# Test-only wrangler config — permissive rate limits for tests
+name = "push-relay"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[kv_namespaces]]
+binding = "DEVICE_TOKENS"
+id = "test-device-tokens"
+
+[[kv_namespaces]]
+binding = "AUTH_TOKENS"
+id = "test-auth-tokens"
+
+[vars]
+APNS_BUNDLE_ID = "com.aptove.ios"
+APNS_SANDBOX = "true"
+FCM_PROJECT_ID = ""
+TOKEN_SERVICE_URL = "https://token.aptove.com"
+PUSH_BUCKET_CAPACITY = "999999"
+PUSH_REFILL_INTERVAL_MS = "1"
+REGISTER_BUCKET_CAPACITY = "999999"
+REGISTER_REFILL_INTERVAL_MS = "1"
+
+# Permissive rate limits for tests
+[[ratelimits]]
+name = "PUSH_ABUSE_LIMITER"
+namespace_id = "1001"
+  [ratelimits.simple]
+  limit = 1000
+  period = 60
+
+[[ratelimits]]
+name = "REGISTER_ABUSE_LIMITER"
+namespace_id = "1002"
+  [ratelimits.simple]
+  limit = 1000
+  period = 60
+
+[[ratelimits]]
+name = "HEALTH_LIMITER"
+namespace_id = "1003"
+  [ratelimits.simple]
+  limit = 1000
+  period = 60

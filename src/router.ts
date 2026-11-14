@@ -11,6 +11,7 @@ import { addDevice, removeDevice, getDevices } from "./kv";
 import { sendApns } from "./apns";
 import { sendFcm } from "./fcm";
 import { verifyBearerJwt } from "./jwt";
+import { checkTokenBucket, type BucketConfig } from "./ratelimit";
 
 // ───────────────────────────────
 // Request routing
@@ -24,8 +25,11 @@ export async function handleRequest(
   const { pathname } = url;
   const method = request.method;
 
-  // Health check (no auth)
+  // Health check (no auth — IP-based rate limit only)
   if (method === "GET" && pathname === "/health") {
+    const ip = request.headers.get("cf-connecting-ip") || "unknown";
+    const { success } = await env.HEALTH_LIMITER.limit({ key: ip });
+    if (!success) return rateLimitResponse();
     return json({ ok: true, status: "healthy", timestamp: new Date().toISOString() });
   }
 
@@ -58,6 +62,18 @@ async function handleRegister(
   const auth = await verifyBearerJwt(request, env);
   if (!auth.ok) return json({ ok: false, error: auth.error }, 401);
   const isolationKey = auth.sub;
+
+  // Tier 1: Cloudflare native hard spacing (1/min per client)
+  const { success } = await env.REGISTER_ABUSE_LIMITER.limit({ key: isolationKey });
+  if (!success) return rateLimitResponse();
+
+  // Tier 2: Token bucket (capacity 5, refill 1/hr)
+  const regConfig: BucketConfig = {
+    capacity: parseInt(env.REGISTER_BUCKET_CAPACITY) || 5,
+    refillIntervalMs: parseInt(env.REGISTER_REFILL_INTERVAL_MS) || 3600000,
+  };
+  const bucket = await checkTokenBucket(env.DEVICE_TOKENS, `register:${isolationKey}`, regConfig);
+  if (!bucket.allowed) return rateLimitResponse(bucket.retryAfterSeconds);
 
   const body = await parseBody<RegisterRequest>(request);
   if (!body) return json({ ok: false, error: "Invalid JSON body" }, 400);
@@ -116,6 +132,18 @@ async function handlePush(
   if (!auth.ok) return json({ ok: false, error: auth.error }, 401);
   const isolationKey = auth.sub;
 
+  // Tier 1: Cloudflare native hard spacing (1/min per client)
+  const { success } = await env.PUSH_ABUSE_LIMITER.limit({ key: isolationKey });
+  if (!success) return rateLimitResponse();
+
+  // Tier 2: Token bucket (capacity 20, refill 1/12min)
+  const pushConfig: BucketConfig = {
+    capacity: parseInt(env.PUSH_BUCKET_CAPACITY) || 20,
+    refillIntervalMs: parseInt(env.PUSH_REFILL_INTERVAL_MS) || 720000,
+  };
+  const bucket = await checkTokenBucket(env.DEVICE_TOKENS, `push:${isolationKey}`, pushConfig);
+  if (!bucket.allowed) return rateLimitResponse(bucket.retryAfterSeconds);
+
   const body = await parseBody<PushRequest>(request);
   if (!body) return json({ ok: false, error: "Invalid JSON body" }, 400);
 
@@ -171,4 +199,18 @@ function json(data: ApiResponse, status = 200): Response {
       "cache-control": "no-store",
     },
   });
+}
+
+function rateLimitResponse(retryAfterSeconds?: number): Response {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    "cache-control": "no-store",
+  };
+  if (retryAfterSeconds !== undefined && retryAfterSeconds > 0) {
+    headers["Retry-After"] = String(retryAfterSeconds);
+  }
+  return new Response(
+    JSON.stringify({ ok: false, error: "Rate limit exceeded" }),
+    { status: 429, headers },
+  );
 }

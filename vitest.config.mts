@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [
     cloudflareTest({
-      wrangler: { configPath: "./wrangler.toml" },
+      wrangler: { configPath: "./wrangler.test.toml" },
       miniflare: {
         kvNamespaces: ["DEVICE_TOKENS", "AUTH_TOKENS"],
         bindings: {
@@ -17,6 +17,10 @@ export default defineConfig({
           FCM_CLIENT_EMAIL: "test@test.iam.gserviceaccount.com",
           FCM_PRIVATE_KEY: "test-key",
           TOKEN_SERVICE_URL: "https://token.aptove.com",
+          PUSH_BUCKET_CAPACITY: "999999",
+          PUSH_REFILL_INTERVAL_MS: "1",
+          REGISTER_BUCKET_CAPACITY: "999999",
+          REGISTER_REFILL_INTERVAL_MS: "1",
         },
       },
     }),

@@ -13,6 +13,17 @@ export interface Env {
   DEVICE_TOKENS: KVNamespace;
   AUTH_TOKENS: KVNamespace;
 
+  // Cloudflare native rate limiters (Tier 1 — hard spacing)
+  PUSH_ABUSE_LIMITER: RateLimit;
+  REGISTER_ABUSE_LIMITER: RateLimit;
+  HEALTH_LIMITER: RateLimit;
+
+  // Token bucket configuration (Tier 2 — precise enforcement)
+  PUSH_BUCKET_CAPACITY: string;        // default "20"
+  PUSH_REFILL_INTERVAL_MS: string;     // default "720000" (12 min)
+  REGISTER_BUCKET_CAPACITY: string;    // default "5"
+  REGISTER_REFILL_INTERVAL_MS: string; // default "3600000" (1 hr)
+
   // APNs configuration
   APNS_PRIVATE_KEY: string; // .p8 key contents (secret)
   APNS_KEY_ID: string; // 10-char key ID (secret)

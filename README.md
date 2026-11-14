@@ -165,6 +165,20 @@ npm run test:watch # watch mode
 npm run typecheck  # TypeScript type checking
 ```
 
+Tests run on [Miniflare](https://miniflare.dev/) (Cloudflare's local Worker simulator) via `@cloudflare/vitest-pool-workers` — entirely in-memory, no Cloudflare account or network access needed.
+
+### Test configuration
+
+Tests use a separate `wrangler.test.toml` (referenced by `vitest.config.mts`) instead of the production `wrangler.toml`. This test config provides:
+
+- **Permissive Cloudflare native rate limits** (`limit = 1000` instead of `1`) so Tier 1 abuse ceilings don't interfere with tests that make multiple requests.
+- **Permissive token bucket parameters** via `miniflare.bindings` overrides (`PUSH_BUCKET_CAPACITY = "999999"`, `PUSH_REFILL_INTERVAL_MS = "1"`, etc.) so Tier 2 token buckets are effectively unlimited.
+- **Fake KV namespace IDs** (`test-device-tokens`, `test-auth-tokens`) that don't correspond to real Cloudflare namespaces — Miniflare creates in-memory stores for them.
+
+This separation ensures existing tests (push delivery, device registration, JWT verification, etc.) exercise the real application logic without being blocked by rate limits, while production deployments via `wrangler deploy` always use the restrictive `wrangler.toml` config.
+
+> Note: In local dev mode (`npm run dev`) the relay fetches JWKS from the live cf-token URL (`TOKEN_SERVICE_URL`). Tests generate their own RSA key pair and seed JWKS into the in-memory KV directly, so they run entirely offline.
+
 ## How Device Token Addressing Works
 
 **APNs (iOS):** The device token appears in the URL path:
@@ -187,6 +201,53 @@ POST https://fcm.googleapis.com/v1/projects/<PROJECT>/messages:send
 The OAuth2 bearer token identifies the publisher (service account). Google uses the device token to route via its persistent GCM connection to the device.
 
 **Key insight:** Auth credentials (JWT/OAuth2) = "who is sending". Device tokens = "where to deliver". These are completely separate concerns.
+
+## Rate Limiting
+
+Every protected endpoint has two layers of rate limiting:
+
+| Tier | Mechanism | Purpose |
+|------|-----------|---------|
+| **Tier 1 — Abuse ceiling** | Cloudflare native `[[ratelimits]]` binding | Hard cutoff for burst abuse/DoS. Zero KV cost. |
+| **Tier 2 — Token bucket** | KV-backed token bucket | Sustained rate control with configurable burst. |
+
+Request flow: Tier 1 check → Tier 2 check → process request. Both return `429 Too Many Requests` with a `Retry-After` header when exceeded.
+
+### Per-endpoint limits
+
+| Endpoint | Tier 1 (native) | Tier 2 bucket capacity | Tier 2 refill rate | Sustained max |
+|----------|-----------------|------------------------|--------------------|--------------:|
+| `POST /push` | 1 req/min per `client_id` | 20 | 1 token per 12 min | 5/hr |
+| `POST /register` | 1 req/min per `client_id` | 5 | 1 token per 1 hr | 1/hr |
+| `GET /health` | 1 req/min per IP | — | — | 1/min |
+
+Authenticated endpoints are keyed on the JWT `sub` claim (bridge `client_id`). The public `/health` endpoint is keyed on the client IP (`cf-connecting-ip`).
+
+### Token bucket algorithm
+
+Each client gets a bucket with a fixed capacity. Every request consumes one token. Tokens refill at a constant rate up to the maximum capacity. This allows short bursts (e.g. 20 rapid pushes) while enforcing a sustained rate over time.
+
+KV key format: `rl:{endpoint}:{client_id}`, value: `{tokens, last_refill_at}`, TTL: 24h (auto-cleanup of inactive clients).
+
+### Configuration
+
+Token bucket parameters are configurable via `[vars]` in `wrangler.toml` (override with `wrangler secret put` or `.dev.vars` locally):
+
+```toml
+[vars]
+PUSH_BUCKET_CAPACITY = "20"
+PUSH_REFILL_INTERVAL_MS = "720000"        # 12 minutes
+REGISTER_BUCKET_CAPACITY = "5"
+REGISTER_REFILL_INTERVAL_MS = "3600000"   # 1 hour
+```
+
+### 429 response format
+
+```json
+{ "error": "Rate limit exceeded" }
+```
+
+Headers: `Retry-After: <seconds>` (token bucket), or no `Retry-After` (Tier 1 — retry after 60s).
 
 ## Security Model
 
