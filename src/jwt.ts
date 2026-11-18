@@ -102,9 +102,16 @@ export async function verifyBearerJwt(
   const matchedKey = jwks.keys.find((k) => k.kid === header.kid);
   if (!matchedKey) {
     if (!_retry) {
-      // Might be key rotation — bust the cache and try once more
-      await env.AUTH_TOKENS.delete("jwks:cache");
-      return verifyBearerJwt(request, env, true);
+      // Might be key rotation — refetch at most once every 5 minutes.
+      // Never delete the cached copy first: doing so lets unauthenticated
+      // requests with random kid values keep the cache permanently empty.
+      const cooldownKey = "jwks:refetch_cooldown";
+      const last = await env.AUTH_TOKENS.get(cooldownKey);
+      const now = Date.now();
+      if (!last || now - parseInt(last) > 5 * 60 * 1000) {
+        await env.AUTH_TOKENS.put(cooldownKey, String(now), { expirationTtl: 600 });
+        return verifyBearerJwt(request, env, true);
+      }
     }
     return { ok: false, error: "Unknown key ID" };
   }
