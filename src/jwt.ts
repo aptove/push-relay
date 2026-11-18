@@ -82,14 +82,17 @@ export async function verifyBearerJwt(
   if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) {
     return { ok: false, error: "JWT expired" };
   }
-  if (payload.aud !== "https://push.aptove.com") {
+  if (payload.aud !== env.TOKEN_AUDIENCE) {
     return { ok: false, error: "Invalid audience" };
+  }
+  if (!payload.iss || payload.iss !== env.TOKEN_ISSUER) {
+    return { ok: false, error: "Invalid issuer" };
   }
   if (!payload.sub) {
     return { ok: false, error: "Missing sub claim" };
   }
-  if (!payload.scope) {
-    return { ok: false, error: "Missing scope claim" };
+  if (payload.scope !== "push:write") {
+    return { ok: false, error: "Invalid scope" };
   }
 
   let jwks: JwksDocument;

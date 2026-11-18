@@ -44,6 +44,8 @@ APNS_BUNDLE_ID = "com.aptove.ios"
 APNS_SANDBOX = "true"  # Use "true" for debug builds, "false" for production/TestFlight
 FCM_PROJECT_ID = ""
 TOKEN_SERVICE_URL = "https://token.aptove.com"
+TOKEN_ISSUER      = "https://token.aptove.com"
+TOKEN_AUDIENCE    = "https://push.aptove.com"
 
 # Token bucket rate limit configuration (override per deployment)
 PUSH_BUCKET_CAPACITY = "20"

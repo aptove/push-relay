@@ -38,6 +38,8 @@ export interface Env {
 
   // JWT auth — cf-token service URL for JWKS fetching
   TOKEN_SERVICE_URL: string; // "https://token.aptove.com" (var)
+  TOKEN_ISSUER: string;      // "https://token.aptove.com" (var)
+  TOKEN_AUDIENCE: string;    // "https://push.aptove.com" (var)
 }
 
 /** Device registration stored in KV */
