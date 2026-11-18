@@ -83,7 +83,7 @@ Response:
 ## Setup
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) ≥ 18
+- [Node.js](https://nodejs.org/) ≥ 20
 - [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) (`npm i -g wrangler`)
 - A Cloudflare account
 - **cf-token** deployed and running (see `cf-token/README.md` — must be set up first)
@@ -131,13 +131,13 @@ npm run deploy
 
 ### 6. CI/CD (GitHub Actions)
 
-Pushing to `main` automatically runs tests and deploys to Cloudflare Workers.
+Pushing a version tag (`v*`) triggers the CI workflow: runs tests, then deploys to Cloudflare Workers.
 
 **Required GitHub Secrets** (Settings → Secrets and variables → Actions):
 
 | Secret | Description | How to get it |
 |--------|-------------|---------------|
-| `CLOUDFLARE_API_TOKEN` | Scoped API token for Workers | Cloudflare Dashboard → My Profile → API Tokens → Create Token → use **"Edit Cloudflare Workers"** template. Scope to your account and `aptov.com` zone only. |
+| `CLOUDFLARE_API_TOKEN` | Scoped API token for Workers | Cloudflare Dashboard → My Profile → API Tokens → Create Token → use **"Edit Cloudflare Workers"** template. Scope to your account and `aptove.com` zone only. |
 | `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account identifier | Cloudflare Dashboard → any domain → right sidebar under **Account ID** (32-char hex). |
 
 > **Security note:** Use the "Edit Cloudflare Workers" token template — it grants only Workers write + Account read permissions. Restrict the token to your specific account and zone so a leaked token cannot affect other resources.
@@ -219,6 +219,7 @@ Request flow: Tier 1 check → Tier 2 check → process request. Both return `42
 |----------|-----------------|------------------------|--------------------|--------------:|
 | `POST /push` | 1 req/min per `client_id` | 20 | 1 token per 12 min | 5/hr |
 | `POST /register` | 1 req/min per `client_id` | 5 | 1 token per 1 hr | 1/hr |
+| `DELETE /register` | 1 req/min per `client_id` (shared with POST) | — | — | 1/min |
 | `GET /health` | 1 req/min per IP | — | — | 1/min |
 
 Authenticated endpoints are keyed on the JWT `sub` claim (bridge `client_id`). The public `/health` endpoint is keyed on the client IP (`cf-connecting-ip`).
