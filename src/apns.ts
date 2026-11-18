@@ -111,6 +111,9 @@ function apnsHost(sandbox: string): string {
  *   URL = "where to deliver" (device address)
  *   Body = "what to show"    (notification content)
  */
+/** APNs device tokens are 32 bytes encoded as 64 lowercase hex characters. */
+const APNS_TOKEN_RE = /^[0-9a-fA-F]{64}$/;
+
 export async function sendApns(
   env: Env,
   deviceToken: string,
@@ -118,6 +121,10 @@ export async function sendApns(
   body: string,
   data?: Record<string, string>,
 ): Promise<PushResult> {
+  if (!APNS_TOKEN_RE.test(deviceToken)) {
+    return { platform: "ios", status: "failed", reason: "invalid_device_token" };
+  }
+
   const jwt = await getApnsJwt(env);
   const host = apnsHost(env.APNS_SANDBOX);
   const url = `${host}/3/device/${deviceToken}`;
