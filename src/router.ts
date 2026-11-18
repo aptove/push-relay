@@ -109,6 +109,11 @@ async function handleUnregister(
   if (!auth.ok) return json({ ok: false, error: auth.error }, 401);
   const isolationKey = auth.sub;
 
+  // Rate limit: reuse the register limiter (1/min per client) so a client
+  // cannot repeatedly unregister devices to circumvent the registration cap.
+  const { success } = await env.REGISTER_ABUSE_LIMITER.limit({ key: isolationKey });
+  if (!success) return rateLimitResponse();
+
   const body = await parseBody<UnregisterRequest>(request);
   if (!body) return json({ ok: false, error: "Invalid JSON body" }, 400);
 
