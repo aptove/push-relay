@@ -34,9 +34,11 @@ enabled = true
 persist = true
 head_sampling_rate = 1
 
-# Cron Trigger: refresh APNs JWT + FCM OAuth2 token every 45 minutes
+# Cron Trigger: refresh APNs JWT + FCM OAuth2 token (fires at :00 and :30 each hour)
+# Note: */45 does NOT mean "every 45 minutes" — it fires at minute 0 and 45 only.
+# 0,30 gives guaranteed 30-minute intervals, well within the APNs JWT 1-hour expiry.
 [triggers]
-crons = ["*/45 * * * *"]
+crons = ["0,30 * * * *"]
 
 # Non-secret variables
 [vars]
