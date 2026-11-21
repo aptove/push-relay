@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { env } from "cloudflare:test";
-import { addDevice, getDevices, removeDevice, removeDeviceGlobally } from "../src/kv";
-import type { DeviceRegistration } from "../src/types";
+import { addDevice, getDevices, removeDevice, removeDeviceGlobally, hashDeviceToken, addDeviceTokenIndex, removeDeviceTokenIndex } from "../src/kv";
+import type { DeviceRegistration, DeviceTokenIndex } from "../src/types";
 
 function makeDevice(
   overrides: Partial<DeviceRegistration> = {},
@@ -117,5 +117,100 @@ describe("KV device storage", () => {
     const remaining = await getDevices(env.DEVICE_TOKENS, RELAY_B);
     expect(remaining).toHaveLength(1);
     expect(remaining[0].device_token).toBe("other");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Device token overlap index
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("hashDeviceToken", () => {
+  it("returns a 64-char hex string", async () => {
+    const hash = await hashDeviceToken("some-device-token");
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("produces consistent hashes for the same input", async () => {
+    const a = await hashDeviceToken("token-abc");
+    const b = await hashDeviceToken("token-abc");
+    expect(a).toBe(b);
+  });
+
+  it("produces different hashes for different inputs", async () => {
+    const a = await hashDeviceToken("token-1");
+    const b = await hashDeviceToken("token-2");
+    expect(a).not.toBe(b);
+  });
+});
+
+describe("addDeviceTokenIndex / removeDeviceTokenIndex", () => {
+  it("creates an index entry on first add", async () => {
+    const deviceToken = `dt-add-${Date.now()}`;
+    await addDeviceTokenIndex(env.DEVICE_TOKENS, deviceToken, "client-a");
+
+    const hash = await hashDeviceToken(deviceToken);
+    const index = await env.DEVICE_TOKENS.get<DeviceTokenIndex>(`dt:${hash}`, "json");
+    expect(index).not.toBeNull();
+    expect(index!.client_ids).toHaveLength(1);
+    expect(index!.client_ids[0].client_id).toBe("client-a");
+    expect(typeof index!.client_ids[0].first_seen).toBe("string");
+    expect(typeof index!.client_ids[0].last_seen).toBe("string");
+  });
+
+  it("appends a second client_id to existing index", async () => {
+    const deviceToken = `dt-multi-${Date.now()}`;
+    await addDeviceTokenIndex(env.DEVICE_TOKENS, deviceToken, "client-a");
+    await addDeviceTokenIndex(env.DEVICE_TOKENS, deviceToken, "client-b");
+
+    const hash = await hashDeviceToken(deviceToken);
+    const index = await env.DEVICE_TOKENS.get<DeviceTokenIndex>(`dt:${hash}`, "json");
+    expect(index!.client_ids).toHaveLength(2);
+    const ids = index!.client_ids.map((c) => c.client_id);
+    expect(ids).toContain("client-a");
+    expect(ids).toContain("client-b");
+  });
+
+  it("updates last_seen on re-add of same client_id", async () => {
+    const deviceToken = `dt-update-${Date.now()}`;
+    await addDeviceTokenIndex(env.DEVICE_TOKENS, deviceToken, "client-a");
+
+    const hash = await hashDeviceToken(deviceToken);
+    const before = await env.DEVICE_TOKENS.get<DeviceTokenIndex>(`dt:${hash}`, "json");
+    const firstSeen = before!.client_ids[0].first_seen;
+
+    // Re-add same client
+    await addDeviceTokenIndex(env.DEVICE_TOKENS, deviceToken, "client-a");
+
+    const after = await env.DEVICE_TOKENS.get<DeviceTokenIndex>(`dt:${hash}`, "json");
+    expect(after!.client_ids).toHaveLength(1);
+    expect(after!.client_ids[0].first_seen).toBe(firstSeen); // unchanged
+  });
+
+  it("removes a client_id from the index", async () => {
+    const deviceToken = `dt-remove-${Date.now()}`;
+    await addDeviceTokenIndex(env.DEVICE_TOKENS, deviceToken, "client-a");
+    await addDeviceTokenIndex(env.DEVICE_TOKENS, deviceToken, "client-b");
+
+    await removeDeviceTokenIndex(env.DEVICE_TOKENS, deviceToken, "client-a");
+
+    const hash = await hashDeviceToken(deviceToken);
+    const index = await env.DEVICE_TOKENS.get<DeviceTokenIndex>(`dt:${hash}`, "json");
+    expect(index!.client_ids).toHaveLength(1);
+    expect(index!.client_ids[0].client_id).toBe("client-b");
+  });
+
+  it("deletes the KV entry when last client_id is removed", async () => {
+    const deviceToken = `dt-delete-${Date.now()}`;
+    await addDeviceTokenIndex(env.DEVICE_TOKENS, deviceToken, "client-a");
+    await removeDeviceTokenIndex(env.DEVICE_TOKENS, deviceToken, "client-a");
+
+    const hash = await hashDeviceToken(deviceToken);
+    const index = await env.DEVICE_TOKENS.get<DeviceTokenIndex>(`dt:${hash}`, "json");
+    expect(index).toBeNull();
+  });
+
+  it("is a no-op when removing from non-existent index", async () => {
+    // Should not throw
+    await removeDeviceTokenIndex(env.DEVICE_TOKENS, "nonexistent-token", "client-a");
   });
 });

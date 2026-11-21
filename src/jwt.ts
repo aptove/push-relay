@@ -50,6 +50,7 @@ export async function verifyBearerJwt(
   request: Request,
   env: Env,
   _retry = false,
+  requiredScope: string = "push:write",
 ): Promise<JwtVerifyResult> {
   const authHeader = request.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
@@ -91,7 +92,7 @@ export async function verifyBearerJwt(
   if (!payload.sub) {
     return { ok: false, error: "Missing sub claim" };
   }
-  if (payload.scope !== "push:write") {
+  if (payload.scope !== requiredScope) {
     return { ok: false, error: "Invalid scope" };
   }
 

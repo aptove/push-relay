@@ -40,6 +40,9 @@ export interface Env {
   TOKEN_SERVICE_URL: string; // "https://token.aptove.com" (var)
   TOKEN_ISSUER: string;      // "https://token.aptove.com" (var)
   TOKEN_AUDIENCE: string;    // "https://push.aptove.com" (var)
+
+  // Abuse prevention — opt-in via env var, default OFF for self-hosted
+  TRACK_DEVICE_OVERLAP: string; // "true" to index device_tokens for overlap detection
 }
 
 /** Device registration stored in KV */
@@ -80,6 +83,15 @@ export interface PushResult {
   platform: string;
   status: "sent" | "failed" | "removed";
   reason?: string;
+}
+
+/** Device token cross-reference index stored in KV under "dt:{sha256(device_token)}" */
+export interface DeviceTokenIndex {
+  client_ids: Array<{
+    client_id: string;
+    first_seen: string;
+    last_seen: string;
+  }>;
 }
 
 /** Standard API response */
